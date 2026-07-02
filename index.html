@@ -2843,8 +2843,49 @@ function downloadTemplate() {
   ws['!cols'] = [24, 24, 22, 18, 18, 28, 28, 12, 14, 10].map(w => ({ wch: w }))
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Colaboradores')
-  XLSX.writeFile(wb, 'modelo-importacao-srm.xlsx')
-  showToast('Modelo baixado.', 'success')
+  const wbArray = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+  const blob = new Blob([wbArray], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  saveBlobWithPicker(
+    blob,
+    'modelo-importacao-srm.xlsx',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.xlsx',
+    'Planilha Excel'
+  ).then(saved => { if (saved) showToast('Modelo baixado.', 'success') })
+}
+
+// ── Salvar arquivo com seletor de local (File System Access API) ───────────────
+// Abre a caixa "Salvar como..." nativa do sistema operacional, permitindo ao
+// usuário escolher pasta e nome. Em navegadores sem suporte (Firefox, Safari),
+// cai automaticamente no download padrão (pasta de Downloads).
+async function saveBlobWithPicker(blob, suggestedName, mimeType, extension, description) {
+  if (window.showSaveFilePicker) {
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName,
+        types: [{ description, accept: { [mimeType]: [extension] } }],
+      })
+      const writable = await handle.createWritable()
+      await writable.write(blob)
+      await writable.close()
+      return true
+    } catch (e) {
+      // Usuário cancelou a caixa de diálogo — não é erro, apenas não salva.
+      if (e && e.name === 'AbortError') return false
+      console.warn('showSaveFilePicker falhou, usando download padrão:', e)
+      // cai para o fallback abaixo
+    }
+  }
+  // Fallback: navegadores sem suporte à File System Access API (Firefox, Safari).
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = suggestedName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+  return true
 }
 
 // ── Export Excel ──────────────────────────────────────────────────────────────
@@ -2885,8 +2926,15 @@ function exportExcel() {
   ws['!cols'] = [28, 24, 22, 18, 18, 28, 28, 12, 14, 10, 14, 12].map(w => ({ wch: w }))
   const wb = XLSX.utils.book_new()
   XLSX.utils.book_append_sheet(wb, ws, 'Colaboradores')
-  XLSX.writeFile(wb, 'layout-srm-colaboradores.xlsx')
-  showToast('Arquivo exportado com sucesso.', 'success')
+  const wbArray = XLSX.write(wb, { bookType: 'xlsx', type: 'array' })
+  const blob = new Blob([wbArray], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+  saveBlobWithPicker(
+    blob,
+    'layout-srm-colaboradores.xlsx',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    '.xlsx',
+    'Planilha Excel'
+  ).then(saved => { if (saved) showToast('Arquivo exportado com sucesso.', 'success') })
 }
 
 // ── Toast ─────────────────────────────────────────────────────────────────────
@@ -4025,11 +4073,16 @@ function exportMapPNG() {
   ctx.fillStyle = '#9ca3af'; ctx.font = 'bold 11px sans-serif'
   ctx.textAlign = 'left'; ctx.textBaseline = 'top'
   ctx.fillText(FLOOR_LABEL[currentFloor] || String(currentFloor), PAD, 14)
-  const link = document.createElement('a')
-  link.download = `layout-srm-${currentFloor}.png`
-  link.href = canvas.toDataURL('image/png')
-  link.click()
-  showToast('Imagem exportada com sucesso.', 'success')
+  canvas.toBlob(blob => {
+    if (!blob) { showToast('Falha ao gerar imagem.', 'error'); return }
+    saveBlobWithPicker(
+      blob,
+      `layout-srm-${currentFloor}.png`,
+      'image/png',
+      '.png',
+      'Imagem PNG'
+    ).then(saved => { if (saved) showToast('Imagem exportada com sucesso.', 'success') })
+  }, 'image/png')
 }
 
 function openLogModal() {
